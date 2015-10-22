@@ -80,7 +80,11 @@ class ContentExtractionModel(object):
 
         # run model and select results
         if features is not None:
-            content_mask = self._block_model.predict(features) > self._threshold
+            scores = self._block_model.predict(features)
+            # insert scores into blocks for retrieval later
+            for block, score in zip(blocks, scores):
+                block.score = score
+            content_mask = scores > self._threshold
             results = [ele[0] for ele in zip(blocks, content_mask) if ele[1]]
         else:
             # doc is too short. return all content
