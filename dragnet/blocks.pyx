@@ -129,13 +129,14 @@ cdef vector[string] _tokens_from_text(vector[string] text):
 
 class Block(object):
     def __init__(self, text, link_density, text_density,
-            anchors, link_tokens, css, **kwargs):
+            anchors, link_tokens, css, text_elements, **kwargs):
         self.text = text
         self.link_density = link_density
         self.text_density = text_density
         self.anchors = anchors
         self.link_tokens = link_tokens  # a hook for testing
         self.css = css
+        self.text_elements = text_elements
         self.features = kwargs
 
 
@@ -282,6 +283,7 @@ cdef class PartialBlock:
     cdef vector[string] text
     cdef vector[string] link_tokens
     cdef list anchors
+    cdef list text_elements
     cdef cpp_map[string, vector[string]] css_tree
     cdef cpp_map[string, vector[string]] css
 
@@ -358,6 +360,7 @@ cdef class PartialBlock:
         self.text.clear()
         self.link_tokens.clear()
         self.anchors = []
+        self.text_elements = []
         self._fe_reinit()
 
     cdef void reinit_css(self, bool init_tree):
@@ -454,7 +457,7 @@ cdef class PartialBlock:
             kwargs['block_start_tag'] = self.block_start_tag
             kwargs['block_start_element'] = self.block_start_element
             results.append(Block(block_text, link_d,
-                        text_d, self.anchors, self.link_tokens, css,
+                        text_d, self.anchors, self.link_tokens, css, self.text_elements,
                         **kwargs))
         else:
             self._extract_features(False)
@@ -477,6 +480,8 @@ cdef class PartialBlock:
         except UnicodeDecodeError:
             pass
 
+    cdef void add_text_element(self, cetree.tree.xmlNode* ele, cetree._Document doc):
+        self.text_elements.append(cetree.elementFactory(doc, ele))
 
     cdef void add_anchor(self, cetree.tree.xmlNode* ele, cetree._Document doc):
         """Add the anchor tag to the block"""
@@ -621,6 +626,7 @@ cdef class PartialBlock:
                 # in this case, skip the entire tag,
                 # but it might have some tail text we need
                 self.add_text(node, CTAIL)
+                self.add_text_element(node, doc)
 
             elif BLOCKS.find(tag) != BLOCKS.end():
                 # this is the start of a new block
@@ -630,6 +636,7 @@ cdef class PartialBlock:
                 self.block_start_tag = tag
                 self.block_start_element = cetree.elementFactory(doc, node)
                 self.add_text(node, CTEXT)
+                self.add_text_element(node, doc)
                 if self.do_css:
                     self.update_css(node, False)
                 self.recurse(node, results, doc)
@@ -645,6 +652,7 @@ cdef class PartialBlock:
                 # a standard tag.
                 # we need to get its text and then recurse over the subtree
                 self.add_text(node, CTEXT)
+                self.add_text_element(node, doc)
                 if self.do_css:
                     self.update_css(node, False)
                 self.recurse(node, results, doc)
